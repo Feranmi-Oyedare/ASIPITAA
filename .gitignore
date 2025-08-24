@@ -1,0 +1,27 @@
+# Ignore virtual environments
+venv/
+**/venv/
+
+# Ignore zip files and folders
+*.zip
+zip/
+**/zip/
+
+# Ignore data folders
+data/
+**/data/
+
+# Ignore specific dataset folder
+NGA_population_v2_1_gridded/
+**/NGA_population_v2_1_gridded/
+
+
+*.tif
+tif/
+**/tif/
+
+*.csv
+/.csv
+.csv
+
+/notebooks/.csv
