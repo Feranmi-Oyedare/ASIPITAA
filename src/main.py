@@ -8,19 +8,24 @@ import plotly.express as px
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import LabelEncoder
 
+# ABS_PATH = os.path.dirname(os.path.join(os.path.abspath(__file__), ".."))
 
-ABS_PATH = os.path.abspath(r"/Users/user/Desktop/AIPISCIAA/")
+# Get absolute path to this file
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Go up one level to reach the project root (AIPISCIAA)
+ROOT_DIR = os.path.dirname(CURRENT_DIR)
 
 # ============================
 # Config - update these paths to match your environment
 # ============================
-MODEL_PATH = ABS_PATH + "/models/student_Ct_forecast_model.h5"
-X_SCALER_PATH = ABS_PATH + "/models/X_scaler.pkl"
-Y_SCALER_PATH = ABS_PATH + "/models/y_scaler.pkl"        
-STUDENT_CT_SCALER_PATH = ABS_PATH + "/models/student_ct_scaler.pkl"
-ENCODERS_PATH = ABS_PATH + "/models/encoders.pkl"
-BASE_CSV_PATH = ABS_PATH + "/forecasting_data/Forecasting_streamlit_data.csv"
-NIGERIA_GEOJSON = ABS_PATH + "/forecasting_data/nigeria_lga.json"
+MODEL_PATH = os.path.join(ROOT_DIR, "models", "student_Ct_forecast_model.h5")
+X_SCALER_PATH = os.path.join(ROOT_DIR, "models", "X_scaler.pkl")
+Y_SCALER_PATH = os.path.join(ROOT_DIR, "models", "y_scaler.pkl")        
+STUDENT_CT_SCALER_PATH = os.path.join(ROOT_DIR, "models", "student_ct_scaler.pkl")
+ENCODERS_PATH = os.path.join(ROOT_DIR, "models", "encoders.pkl")
+BASE_CSV_PATH = os.path.join(ROOT_DIR, "forecasting_data", "Forecasting_streamlit_data.csv")
+NIGERIA_GEOJSON = os.path.join(ROOT_DIR, "forecasting_data", "nigeria_lga.json")
 # ============================
 
 st.set_page_config(page_title="Nigeria Education Forecast Dashboard", layout="wide")
