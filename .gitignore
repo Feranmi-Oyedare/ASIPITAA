@@ -1,6 +1,19 @@
 # Ignore virtual environments
 venv/
 **/venv/
+new_venv/
+**/new_venv
+venv/
+new_venv/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+.DS_Store
+
 
 # Ignore zip files and folders
 *.zip
@@ -20,8 +33,5 @@ NGA_population_v2_1_gridded/
 tif/
 **/tif/
 
-*.csv
-/.csv
-.csv
-
-/notebooks/.csv
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
