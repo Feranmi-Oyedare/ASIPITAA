@@ -8,16 +8,19 @@ import plotly.express as px
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import LabelEncoder
 
+
+ABS_PATH = os.path.abspath(r"/Users/user/Desktop/AIPISCIAA/")
+
 # ============================
 # Config - update these paths to match your environment
 # ============================
-MODEL_PATH = r"/Users/user/Desktop/AIPISCIAA/models/student_Ct_forecast_model.h5"
-X_SCALER_PATH = r"/Users/user/Desktop/AIPISCIAA/models/X_scaler.pkl"
-Y_SCALER_PATH = r"/Users/user/Desktop/AIPISCIAA/models/y_scaler.pkl"        
-STUDENT_CT_SCALER_PATH = r"/Users/user/Desktop/AIPISCIAA/models/student_ct_scaler.pkl"
-ENCODERS_PATH = r"/Users/user/Desktop/AIPISCIAA/models/encoders.pkl"
-BASE_CSV_PATH = r"/Users/user/Desktop/AIPISCIAA/forecasting_data/Forecasting_streamlit_data.csv"
-NIGERIA_GEOJSON = r"/Users/user/Desktop/AIPISCIAA/forecasting_data/nigeria_lga.json"
+MODEL_PATH = ABS_PATH + "/models/student_Ct_forecast_model.h5"
+X_SCALER_PATH = ABS_PATH + "/models/X_scaler.pkl"
+Y_SCALER_PATH = ABS_PATH + "/models/y_scaler.pkl"        
+STUDENT_CT_SCALER_PATH = ABS_PATH + "/models/student_ct_scaler.pkl"
+ENCODERS_PATH = ABS_PATH + "/models/encoders.pkl"
+BASE_CSV_PATH = ABS_PATH + "/forecasting_data/Forecasting_streamlit_data.csv"
+NIGERIA_GEOJSON = ABS_PATH + "/forecasting_data/nigeria_lga.json"
 # ============================
 
 st.set_page_config(page_title="Nigeria Education Forecast Dashboard", layout="wide")
