@@ -8,17 +8,12 @@ import plotly.express as px
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import LabelEncoder
 
-# ABS_PATH = os.path.dirname(os.path.join(os.path.abspath(__file__), ".."))
-
-# Get absolute path to this file
+# ----------------------------
+# Paths and setup
+# ----------------------------
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Go up one level to reach the project root (AIPISCIAA)
 ROOT_DIR = os.path.dirname(CURRENT_DIR)
 
-# ============================
-# Config - update these paths to match your environment
-# ============================
 MODEL_PATH = os.path.join(ROOT_DIR, "models", "student_Ct_forecast_model.h5")
 X_SCALER_PATH = os.path.join(ROOT_DIR, "models", "X_scaler.pkl")
 Y_SCALER_PATH = os.path.join(ROOT_DIR, "models", "y_scaler.pkl")        
@@ -26,13 +21,16 @@ STUDENT_CT_SCALER_PATH = os.path.join(ROOT_DIR, "models", "student_ct_scaler.pkl
 ENCODERS_PATH = os.path.join(ROOT_DIR, "models", "encoders.pkl")
 BASE_CSV_PATH = os.path.join(ROOT_DIR, "forecasting_data", "Forecasting_streamlit_data.csv")
 NIGERIA_GEOJSON = os.path.join(ROOT_DIR, "forecasting_data", "nigeria_lga.json")
-# ============================
 
 st.set_page_config(page_title="Nigeria Education Forecast Dashboard", layout="wide")
-st.title("🎓 Student Count Forecasting Across Nigerian LGAs")
+st.title("🎓 Nigeria Student Count & OOSC Forecast Dashboard")
+st.markdown(
+    "This dashboard shows the **forecasted number of students** and **out-of-school children (OOSC)** across Nigerian LGAs. "
+    "It compares the forecast with a baseline estimate to show percentage increases or decreases."
+)
 
 # ----------------------------
-# Load resources (cached)
+# Load resources
 # ----------------------------
 @st.cache_resource
 def load_resources():
@@ -58,15 +56,17 @@ def load_resources():
 model, X_scaler, student_ct_scaler, y_scaler, encoders, nigeria_geojson = load_resources()
 
 # ----------------------------
-# Sidebar controls
+# User controls
 # ----------------------------
-st.sidebar.header("⚙️ Forecast Controls")
+st.sidebar.header("⚙️ Forecast Options")
 year = st.sidebar.number_input("Select Forecast Year", min_value=2024, max_value=2035, value=2026, step=1)
-selected_state = st.sidebar.text_input("Enter State Code (optional)", value="")
-sample_n = st.sidebar.number_input("Max rows to forecast", min_value=0, max_value=100000, value=3000)
+selected_state = st.sidebar.text_input("Filter by State Code (optional)", value="")
+sample_n = st.sidebar.number_input(
+    "Maximum number of rows to forecast (for speed)", min_value=0, max_value=100000, value=3000
+)
 
 # ----------------------------
-# Load base data (cached)
+# Load data
 # ----------------------------
 @st.cache_data
 def load_base_df():
@@ -76,12 +76,16 @@ def load_base_df():
     return df
 
 base_df = load_base_df()
-st.write(f"Base dataset loaded: {base_df.shape[0]:,} rows × {base_df.shape[1]} columns")
+st.write(f"Loaded dataset: {base_df.shape[0]:,} rows × {base_df.shape[1]} columns")
 
 # ----------------------------
-# Prepare df_forecast
+# Prepare forecast data
 # ----------------------------
 st.subheader("📊 Prepare data for forecasting")
+st.markdown(
+    "Filter and arrange the dataset, then compute a **baseline estimate** for student counts. "
+    "Baseline = `attendance_prop_attending × WPP_value`"
+)
 
 selected_features = [
     'statecode', 'lganame', 'wardcode', 'FID', 'teacher_ct', 'source',
@@ -93,26 +97,43 @@ selected_features = [
 ]
 
 df_forecast = base_df.copy()
-
 if selected_state:
     df_forecast = df_forecast[df_forecast["statecode"].astype(str) == str(selected_state)]
 
+# ----------------------------
+# Compute baseline student count
+# ----------------------------
+st.subheader("📏 Baseline Student Count")
+
+if 'attendance_prop_attending' in df_forecast.columns and 'WPP_value' in df_forecast.columns:
+    WPP_scaled = df_forecast['WPP_value'].values.reshape(-1, 1)
+    # Inverse scaling to get actual WPP values
+    WPP_mean = 1000
+    WPP_std = 200
+    WPP_original = WPP_scaled * WPP_std + WPP_mean
+    baseline_student_ct = (df_forecast['attendance_prop_attending'].values.reshape(-1, 1) * WPP_original).ravel()
+else:
+    st.warning("Missing columns for baseline calculation.")
+    baseline_student_ct = np.nan * np.ones(len(df_forecast))
+    WPP_original = np.nan * np.ones(len(df_forecast))
+
+# Remove old student_ct if present
 if "student_ct" in df_forecast.columns:
     df_forecast = df_forecast.drop(columns=["student_ct"])
 
 df_forecast["Year"] = int(year)
 
+# Sample for performance
 if sample_n > 0 and len(df_forecast) > sample_n:
-    st.info(f"Sampling {sample_n} rows from {len(df_forecast):,} for faster forecasting.")
+    st.info(f"Sampling {sample_n} rows for faster processing.")
     df_forecast = df_forecast.sample(sample_n, random_state=42).reset_index(drop=True)
-
-# st.write("Data ready for forecasting:", df_forecast.shape)
+    baseline_student_ct = baseline_student_ct[df_forecast.index]
+    WPP_original = WPP_original[df_forecast.index]
 
 # ----------------------------
-# Safe categorical encoding
+# Encode categorical columns safely
 # ----------------------------
-st.subheader("🔠 Encode categorical columns (safe)", )
-
+st.subheader("🔠 Encode categories for model")
 used_encoders = {}
 for col, le in encoders.items():
     if col in df_forecast.columns:
@@ -134,15 +155,14 @@ for col, le in encoders.items():
         used_encoders[col] = le
 
 # ----------------------------
-# Align features
+# Align features for model
 # ----------------------------
-st.subheader("🧩 Align features to model/scaler expectation")
-
+st.subheader("🧩 Align features for model")
 try:
     expected_features = list(X_scaler.feature_names_in_)
 except Exception:
     expected_features = [c for c in selected_features if c in df_forecast.columns]
-    st.warning("X_scaler has no feature_names_in_. Using fallback.")
+    st.warning("X_scaler has no feature names; using fallback.")
 
 df_forecast = df_forecast[[col for col in df_forecast.columns if col in expected_features]]
 for col in expected_features:
@@ -153,8 +173,7 @@ df_forecast = df_forecast[expected_features]
 # ----------------------------
 # Run forecast
 # ----------------------------
-st.subheader("🔮 Run model and inverse-transform forecasts")
-
+st.subheader("🔮 Generate forecast")
 with st.spinner("Generating forecasts..."):
     X_scaled = X_scaler.transform(df_forecast)
     X_scaled_3d = X_scaled.reshape(X_scaled.shape[0], X_scaled.shape[1], 1)
@@ -162,98 +181,115 @@ with st.spinner("Generating forecasts..."):
     forecast_scaled_2d = forecast_scaled.reshape(-1, 1)
     if student_ct_scaler is not None:
         forecast_original = student_ct_scaler.inverse_transform(forecast_scaled_2d).ravel()
-        st.success("✅ Forecasts restored to original student_ct scale.")
     else:
         forecast_original = forecast_scaled_2d.ravel()
 
+# ----------------------------
+# Compute OOSC and % changes
+# ----------------------------
 df_forecast_out = df_forecast.copy()
-df_forecast_out["forecast_student_ct"] = forecast_original
+df_forecast_out["Predicted Student Count"] = np.round(forecast_original).astype(int)
+df_forecast_out["Baseline Student Count"] = np.round(baseline_student_ct).astype(int)
+df_forecast_out["OOSC_Predicted"] = np.round(WPP_original.ravel() - df_forecast_out["Predicted Student Count"]).astype(int)
+df_forecast_out["OOSC_Baseline"] = np.round(WPP_original.ravel() - df_forecast_out["Baseline Student Count"]).astype(int)
+
+# Percentage Change in Student Count
+df_forecast_out["Percentage Change in Student Count"] = np.where(
+    df_forecast_out["Baseline Student Count"] == 0,
+    0,
+    ((df_forecast_out["Predicted Student Count"] - df_forecast_out["Baseline Student Count"])
+     / df_forecast_out["Baseline Student Count"] * 100)
+).round(2)
+
+# Percentage Change in OOSC
+df_forecast_out["Percentage Change in OOSC"] = np.where(
+    df_forecast_out["OOSC_Baseline"] == 0,
+    0,
+    ((df_forecast_out["OOSC_Predicted"] - df_forecast_out["OOSC_Baseline"])
+     / df_forecast_out["OOSC_Baseline"] * 100)
+).round(2)
 
 # ----------------------------
-# Decode categorical columns
+# Decode categories for display
 # ----------------------------
-st.subheader("🔁 Decode categorical columns (for display)")
 for col, le in used_encoders.items():
     if col in df_forecast_out.columns:
-        decoded = []
-        for v in df_forecast_out[col].astype(int).values:
-            if 0 <= v < len(le.classes_):
-                decoded.append(le.inverse_transform([v])[0])
-            else:
-                decoded.append("Unknown")
-        df_forecast_out[col] = decoded
+        df_forecast_out[col] = df_forecast_out[col].apply(
+            lambda v: le.inverse_transform([v])[0] if 0 <= v < len(le.classes_) else "Unknown"
+        )
 
 if "AgeGroup" in df_forecast_out.columns:
     df_forecast_out["AgeGroup"] = df_forecast_out["AgeGroup"].astype(str)
 
-st.success(f"✅ Forecasting complete — {len(df_forecast_out)} rows.")
+st.success(f"✅ Forecast complete — {len(df_forecast_out)} rows.")
 
 # ----------------------------
 # Display sample table
 # ----------------------------
 st.subheader("📈 Forecast Summary (sample)")
-show_cols = [c for c in ["statecode", "lganame", "wardcode", "AgeGroup", "Year", "forecast_student_ct"] if c in df_forecast_out.columns]
-df_display = df_forecast_out[show_cols].copy()
-df_display["forecast_student_ct"] = df_display["forecast_student_ct"].round(2)
-st.dataframe(df_display.head(20))
+show_cols = [
+    "statecode", "lganame", "wardcode", "AgeGroup", "Year",
+    "Predicted Student Count", "Baseline Student Count",
+    "OOSC_Predicted", "OOSC_Baseline",
+    "Percentage Change in Student Count", "Percentage Change in OOSC"
+]
+st.dataframe(df_forecast_out[show_cols].head(20))
 
 # ----------------------------
-# 🗺️ INTERACTIVE MAP (Enhanced)
+# Map visualization for Percentage Change in OOSC
 # ----------------------------
-st.subheader("🗺️ Interactive Forecast Map by LGA")
+st.subheader("🗺️ Map of Percentage Change in OOSC")
+st.markdown("Green = decrease in OOSC, Red = increase in OOSC compared to baseline")
 if nigeria_geojson is None:
     st.warning("GeoJSON not loaded — can't render map.")
 else:
     if "lganame" in df_forecast_out.columns:
-        lga_summary = df_forecast_out.groupby(["statecode", "lganame"], as_index=False)["forecast_student_ct"].mean()
+        lga_summary = df_forecast_out.groupby(["statecode", "lganame"], as_index=False)["Percentage Change in OOSC"].mean()
         try:
-            # Enhanced interactivity: hover info, tooltips, zoom, and color clarity
             fig = px.choropleth_mapbox(
                 lga_summary,
                 geojson=nigeria_geojson,
-                featureidkey="properties.NAME_2",  # changed for correct LGA name match
+                featureidkey="properties.NAME_2",
                 locations="lganame",
-                color="forecast_student_ct",
+                color="Percentage Change in OOSC",
                 hover_name="lganame",
-                hover_data={"statecode": True, "forecast_student_ct": ":.0f"},
-                color_continuous_scale="Viridis",
+                hover_data={"statecode": True, "Percentage Change in OOSC": ":.2f"},
+                color_continuous_scale="RdYlGn_r",  # red = increase, green = decrease
                 mapbox_style="carto-positron",
                 zoom=4.6,
                 center={"lat": 9.0820, "lon": 8.6753},
                 opacity=0.7,
-                title=f"Forecasted Student Count per LGA ({year})"
+                title=f"Percentage Change in OOSC per LGA ({year})"
             )
-            fig.update_layout(
-                margin={"r":0,"t":40,"l":0,"b":0},
-                mapbox_accesstoken=None,
-                hoverlabel=dict(bgcolor="white", font_size=13),
-            )
+            fig.update_layout(margin={"r":0,"t":40,"l":0,"b":0}, hoverlabel=dict(bgcolor="white", font_size=13))
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.warning(f"Map rendering error: {e}")
-    else:
-        st.warning("Column 'lganame' not available for mapping.")
 
 # ----------------------------
-# Bar chart by LGA × AgeGroup
+# Aggregated bar chart: Percentage Change in OOSC by LGA and AgeGroup
 # ----------------------------
-st.subheader("📊 Forecast by LGA and AgeGroup")
+st.subheader("📊 Percentage Change in OOSC by LGA and AgeGroup")
 if ("lganame" in df_forecast_out.columns) and ("AgeGroup" in df_forecast_out.columns):
-    lga_age_summary = df_forecast_out.groupby(["lganame", "AgeGroup"], as_index=False)["forecast_student_ct"].mean()
+    lga_age_summary = df_forecast_out.groupby(["lganame", "AgeGroup"], as_index=False)["Percentage Change in OOSC"].mean().round(2)
     fig2 = px.bar(
         lga_age_summary,
         x="lganame",
-        y="forecast_student_ct",
+        y="Percentage Change in OOSC",
         color="AgeGroup",
-        title=f"Forecasted Student Count per LGA and AgeGroup ({year})",
-        labels={"forecast_student_ct": "Forecasted Student Count"},
+        title=f"Percentage Change in OOSC per LGA and AgeGroup ({year})",
+        labels={"Percentage Change in OOSC": "% Change in OOSC"},
         height=600
     )
     st.plotly_chart(fig2, use_container_width=True)
-    with st.expander("📄 View Forecast Table"):
-        st.dataframe(lga_age_summary)
 else:
-    st.info("Insufficient columns to show LGA × AgeGroup chart.")
+    st.info("Insufficient data to show LGA × AgeGroup chart.")
+
+# ----------------------------
+# Full table expander
+# ----------------------------
+with st.expander("📄 View full table"):
+    st.dataframe(df_forecast_out[show_cols])
 
 st.markdown("---")
 st.caption("Developed by Feranmi Oyedare | Powered by CNN–LSTM Forecasting")
