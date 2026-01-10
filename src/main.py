@@ -101,6 +101,16 @@ if selected_state:
     df_forecast = df_forecast[df_forecast["statecode"].astype(str) == str(selected_state)]
 
 # ----------------------------
+# Restrict to school-age population (5–16 years)
+# ----------------------------
+if "AgeGroup" in df_forecast.columns:
+    df_forecast["AgeGroup"] = pd.to_numeric(df_forecast["AgeGroup"], errors="coerce")
+    df_forecast = df_forecast[
+        (df_forecast["AgeGroup"] >= 5) &
+        (df_forecast["AgeGroup"] <= 16)
+    ]
+
+# ----------------------------
 # Compute baseline student count
 # ----------------------------
 st.subheader("📏 Baseline Student Count")
